@@ -1,0 +1,184 @@
+import sqlite3
+import requests
+from googlesearch import search
+from bs4 import BeautifulSoup
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
+import re
+
+def create_table():
+    conn = sqlite3.connect('Health_Tracker.db')
+    cursor = conn.cursor()
+
+    create_table_query = '''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            number TEXT,
+            age INTEGER,
+            symptoms TEXT,
+            duration TEXT,
+            result TEXT
+        )
+    '''
+
+    cursor.execute(create_table_query)
+    conn.commit()
+    conn.close()
+
+def insert_data(name, number, age, symptoms, duration, result_summary):
+    conn = sqlite3.connect('user_data.db')
+    cursor = conn.cursor()
+
+    insert_query = '''
+        INSERT INTO users (name, number, age, symptoms, duration, result)
+        VALUES (?, ?, ?, ?, ?, ?)
+    '''
+
+    cursor.execute(insert_query, (name, number, age, symptoms, duration, result_summary))
+    conn.commit()
+    conn.close()
+
+def extract_summary_from_link(link):
+    try:
+        response = requests.get(link)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        summary = soup.get_text()
+        return summary
+    except Exception as e:
+        print(f"Error extracting summary: {str(e)}")
+        return "Error extracting summary."
+def search_google(symptoms, duration, age, num_results=5):
+    search_query = f"Google search for {symptoms} symptoms lasting {duration} at age {age}"
+    results = search(search_query, num_results=num_results)
+
+    summary = ''
+    for i, result in enumerate(results, 1):
+        if i <= 3:
+            link_summary = extract_summary_from_link(result)
+            # Replace multiple consecutive newline characters with a single newline
+            cleaned_summary = re.sub(r'\n+', '\n', link_summary.strip())
+            summary += f"\nResult {i} Summary:\n{cleaned_summary}\n"
+
+    return summary
+
+def submit_data():
+    name = name_entry.get()
+    number = number_entry.get()
+    age = age_entry.get() 
+    symptoms = symptoms_combobox.get()
+    duration = duration_combobox.get()
+
+    # Validation for name
+    if not name.strip():  # Ensure name is not empty or whitespace
+        messagebox.showerror("Error", "Name cannot be empty.")
+        return
+    elif any(char.isdigit() for char in name):  # Check if name contains any digits
+        messagebox.showerror("Error", "Name cannot contain numbers.")
+        return
+
+    # Validation for number
+    try:
+        if not number:
+            raise ValueError("Phone number cannot be empty.")
+        # Check if number contains only digits
+        if not number.isdigit():
+            raise ValueError("Phone number should only contain digits.")
+    except ValueError as e:
+        messagebox.showerror("Error", str(e))
+        return
+    try:
+        if not age:
+            raise ValueError(" Age cannot be empty.")
+        if not age.isdigit():
+            raise ValueError(" Age should only contain digits.")
+        age = int(age)
+        if not 18 <= age <= 100:
+            raise ValueError("Age must be between 18 and 100.")
+    except ValueError as e:
+        messagebox.showerror("Error", str(e))
+        return
+    # Validation for symptoms
+    if not symptoms:
+        messagebox.showerror("Error", "Symptoms selection is required.")
+        return
+
+    # Validation for duration
+    if not duration:
+        messagebox.showerror("Error", "Duration selection is required.")
+        return
+
+    # If all input fields are valid, proceed with further actions
+    create_table()
+    result_summary = search_google(symptoms, duration, age)
+    insert_data(name, number, age, symptoms, duration, result_summary)
+
+    # Show result window
+    show_result_window(name, age, symptoms, duration, result_summary)
+
+def show_result_window(name, age, symptoms, duration, result_summary):
+    result_window = tk.Toplevel(root)
+    result_window.title("User Information and Search Results")
+
+    # Styling
+    result_window.configure(bg="#f0f0f0")
+
+    ttk.Label(result_window, text="User Information:", font=("Arial", 12, "bold")).grid(row=0, column=0, sticky=tk.W, padx=10, pady=(10, 5))
+    ttk.Label(result_window, text=f"Name: {name}", font=("Arial", 10)).grid(row=1, column=0, sticky=tk.W, padx=10)
+    ttk.Label(result_window, text=f"Age: {age}", font=("Arial", 10)).grid(row=2, column=0, sticky=tk.W, padx=10)
+    ttk.Label(result_window, text=f"Symptoms: {symptoms}", font=("Arial", 10)).grid(row=3, column=0, sticky=tk.W, padx=10)
+    ttk.Label(result_window, text=f"Duration: {duration}", font=("Arial", 10)).grid(row=4, column=0, sticky=tk.W, padx=10)
+
+    ttk.Separator(result_window, orient=tk.HORIZONTAL).grid(row=5, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+
+    ttk.Label(result_window, text="Search Results:", font=("Arial", 12, "bold")).grid(row=6, column=0, sticky=tk.W, padx=10, pady=(10, 5))
+    result_text = scrolledtext.ScrolledText(result_window, width=75, height=15, wrap=tk.WORD)
+    result_text.grid(row=7, column=0, columnspan=2, padx=10)
+    result_text.insert(tk.END, result_summary)
+
+
+def refresh_input():
+    name_entry.delete(0, tk.END)
+    number_entry.delete(0, tk.END)
+    age_entry.delete(0, tk.END)
+    symptoms_combobox.set("")  
+    duration_combobox.set("")  
+
+root = tk.Tk()
+root.title("Health Information Form")
+
+# Create a custom style
+style = ttk.Style()
+
+# Configure the style to set the background color of the frame
+style.configure("Custom.TFrame", background="#ffffff")
+
+frame = ttk.Frame(root, padding="20", relief="raised", borderwidth=2, style="Custom.TFrame")
+frame.grid(row=0, column=0, padx=20, pady=20)
+
+# Labels
+ttk.Label(frame, text="Name:", font=("Arial", 12)).grid(row=0, column=0, sticky="w", pady=(0, 5))
+ttk.Label(frame, text="Phone Number:", font=("Arial", 12)).grid(row=1, column=0, sticky="w", pady=(0, 5))
+ttk.Label(frame, text="Age:", font=("Arial", 12)).grid(row=2, column=0, sticky="w", pady=(0, 5))
+ttk.Label(frame, text="Health Symptoms:", font=("Arial", 12)).grid(row=3, column=0, sticky="w", pady=(0, 5))
+ttk.Label(frame, text="Symptom Duration:", font=("Arial", 12)).grid(row=4, column=0, sticky="w", pady=(0, 5))
+
+# Entries and Comboboxes
+name_entry = ttk.Entry(frame, width=30)
+name_entry.grid(row=0, column=1, sticky="w", pady=(0, 5))
+number_entry = ttk.Entry(frame, width=30)
+number_entry.grid(row=1, column=1, sticky="w", pady=(0, 5))
+age_entry = ttk.Entry(frame, width=5)
+age_entry.grid(row=2, column=1, sticky="w", pady=(0, 5))
+symptoms_combobox = ttk.Combobox(frame, values=["Fever", "Cough", "Headache", "Cold","Fatigue", "Bodyache"], width=27)
+symptoms_combobox.grid(row=3, column=1, sticky="w", pady=(0, 5))
+duration_combobox = ttk.Combobox(frame, values=["3 days", "1 week", "2 weeks"], width=27)
+duration_combobox.grid(row=4, column=1, sticky="w", pady=(0, 5))
+
+# Buttons
+submit_button = ttk.Button(frame, text="Submit", command=submit_data)
+submit_button.grid(row=5, column=1, sticky="w", pady=(20, 0))
+refresh_button = ttk.Button(frame, text="Refresh", command=refresh_input)
+refresh_button.grid(row=5, column=0, sticky="w", pady=(20, 0))
+
+root.mainloop()
